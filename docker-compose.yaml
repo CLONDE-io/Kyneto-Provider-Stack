@@ -7,7 +7,9 @@ services:
       - "5001:5001" # API (Internal use)
       - "8080:8080" # Gateway
     volumes:
-      - ipfs_data:/data/ipfs
+      - kyneto_vault:/data/kyneto-vault  # Use the Kyneto vault for IPFS data
+    environment:
+      - IPFS_PATH=/data/kyneto-vault/ipfs-data
     restart: always
 
   # Kyneto Provider Node
@@ -24,9 +26,20 @@ services:
       - PROOF_VERIFIER_CONTRACT=${PROOF_VERIFIER_CONTRACT}
       - MARKETPLACE_CONTRACT=${MARKETPLACE_CONTRACT}
       - KUBO_API_URL=http://ipfs:5001
+      # Storage Vault Configuration
+      - PLEDGED_CAPACITY_GB=${PLEDGED_CAPACITY_GB:-10}
+      - KYNETO_VAULT_PATH=/data/kyneto-vault
+    volumes:
+      - kyneto_vault:/data/kyneto-vault  # Shared vault with IPFS
     depends_on:
       - ipfs
     restart: always
 
 volumes:
-  ipfs_data:
+  kyneto_vault:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${KYNETO_VAULT_PATH:-./kyneto-vault}
+

@@ -7,7 +7,6 @@ import { MerkleTree } from 'merkletreejs';
 import keccak256 from 'keccak256';
 import * as fs from 'fs';
 import * as path from 'path';
-import { StorageVaultManager, createVaultManagerFromEnv, VaultStatus } from './storage-vault';
 
 dotenv.config();
 
@@ -28,8 +27,6 @@ class ProviderDaemon {
     private heartbeatInterval: NodeJS.Timeout | null = null;
     private eventInterval: NodeJS.Timeout | null = null;
     private merkleTrees: Map<string, MerkleTree> = new Map();
-    private vaultManager: StorageVaultManager | null = null;
-    private vaultStatus: VaultStatus | null = null;
     private shardData: Map<string, Buffer[]> = new Map();
 
     private readonly API_URL = process.env.API_URL || 'http://localhost:3000';
@@ -61,20 +58,6 @@ class ProviderDaemon {
     async start() {
         logger.info('🚀 Provider Daemon starting...');
         logger.info(`📍 Provider Address: ${this.wallet.address}`);
-
-        // Initialize Storage Vault
-        this.vaultManager = createVaultManagerFromEnv();
-        if (this.vaultManager) {
-            const success = await this.vaultManager.ensureVaultExists();
-            if (!success) {
-                logger.error('❌ Failed to initialize storage vault. Exiting.');
-                process.exit(1);
-            }
-            this.vaultStatus = await this.vaultManager.getVaultStatus();
-            logger.info(`💾 Storage Vault: ${this.vaultStatus.usedGB}GB / ${this.vaultStatus.capacityGB}GB (${this.vaultStatus.percentUsed}% used)`);
-        } else {
-            logger.warn('⚠️  Storage vault not configured. Set PLEDGED_CAPACITY_GB in .env');
-        }
 
         try {
             const id = await this.ipfs.id();
@@ -167,32 +150,10 @@ class ProviderDaemon {
 
     private async sendHeartbeat() {
         try {
-            // Update vault status before sending heartbeat
-            if (this.vaultManager) {
-                this.vaultStatus = await this.vaultManager.getVaultStatus();
-            }
-
-            const heartbeatData: any = {
+            await axios.post(`${this.API_URL}/api/heartbeat`, {
                 provider_address: this.wallet.address
-            };
-
-            // Include storage vault status in heartbeat
-            if (this.vaultStatus) {
-                heartbeatData.storage = {
-                    pledged_capacity_gb: this.vaultStatus.capacityGB,
-                    used_gb: this.vaultStatus.usedGB,
-                    available_gb: this.vaultStatus.availableGB,
-                    percent_used: this.vaultStatus.percentUsed
-                };
-            }
-
-            await axios.post(`${this.API_URL}/api/heartbeat`, heartbeatData);
-
-            if (this.vaultStatus) {
-                logger.info(`💓 Heartbeat sent (Storage: ${this.vaultStatus.usedGB}GB / ${this.vaultStatus.capacityGB}GB)`);
-            } else {
-                logger.info('💓 Heartbeat sent');
-            }
+            });
+            logger.info('💓 Heartbeat sent');
         } catch (error: any) {
             logger.warn(`⚠️ Heartbeat failed: ${error.message}`);
         }
