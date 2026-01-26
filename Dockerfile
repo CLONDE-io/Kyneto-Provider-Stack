@@ -4,10 +4,10 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN npm install
 
 # Copy source code and TypeScript config
 COPY src ./src
