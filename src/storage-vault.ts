@@ -110,6 +110,23 @@ export class StorageVaultManager {
     }
 
     /**
+     * Extend the vault file to the new capacity
+     */
+    private async extendVaultFile(): Promise<void> {
+        logger.info(`🔨 Extending vault file to ${this.capacityGB}GB...`);
+        const sizeBytes = BigInt(this.capacityGB) * BigInt(1024 * 1024 * 1024);
+
+        try {
+            // Use truncate to extend the file (safe for sparse files)
+            fs.truncateSync(this.vaultFile, Number(sizeBytes));
+            logger.info(`✅ Vault file extended: ${this.vaultFile}`);
+        } catch (error: any) {
+            logger.error(`❌ Failed to extend vault file: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
      * Create a sparse file with the specified capacity
      * Sparse files only consume actual disk space as data is written
      */
