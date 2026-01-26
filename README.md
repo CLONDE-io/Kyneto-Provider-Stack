@@ -1,54 +1,64 @@
-# Kyneto Provider Node Setup
+# Kyneto Provider Node
 
-This guide explains how to run a Kyneto Provider Node on the Polygon Amoy Testnet.
+Run a Kyneto storage provider node on the Polygon Amoy Testnet.
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) installed and running.
-- A Polygon Amoy wallet with some POL (for gas) and KYN tokens (for staking).
-- Your wallet's **Private Key**.
+- [Docker](https://docs.docker.com/get-docker/) installed and running
+- A Polygon Amoy wallet with:
+  - POL for gas fees ([Polygon Faucet](https://faucet.polygon.technology/))
+  - KYN tokens for staking
+- Your wallet's **Private Key**
 
-## For Maintainers (Building the Image)
+## Quick Start
 
-If you are the developer distributing this stack:
-1.  Run the publish script to build and push the image to Docker Hub:
-    ```powershell
-    .\publish_provider.ps1
-    ```
+### 1. Clone this repository
 
-## Quick Start (For Testers)
+```bash
+git clone https://github.com/CLONDE-io/Kyneto-Provider-Stack.git
+cd Kyneto-Provider-Stack
+```
 
-1.  **Navigate to the provider stack directory `provider-stack` :**
-    ```bash
-    cd provider-stack
-    ```
+### 2. Configure Environment
 
-2.  **Configure Environment `provider-stack/.env` :**
-    Copy the example environment file, and rename it to `.env`:
-    ```bash
-    cp .env.example .env
-    ```
-    Open `.env` and set your `PRIVATE_KEY`. The contract addresses are already pre-configured for the Amoy Testnet.
+```bash
+cp .env.example .env
+```
 
-3.  **Run the Node `provider-stack/docker-compose.yml` :**
-    ```bash
-    docker-compose up -d
-    ```
-    This will start:
-    - **IPFS Node**: Handles file storage and retrieval.
-    - **Provider Daemon**: Manages pledges, deals, and proofs.
+Edit `.env` and set your `PRIVATE_KEY`. All contract addresses are pre-configured.
 
-4.  **Verify Status `provider-stack/docker-compose.yml` :**
-    Check the logs to ensure everything is running smoothly:
-    ```bash
-    docker-compose logs -f provider-node
-    ```
+### 3. Run the Node
 
-## Registration
+```bash
+docker-compose up -d
+```
 
-Once your node is running, it will automatically attempt to register and create a capacity pledge if you have configured it to do so (or you can use the CLI tools if available).
+This starts:
+- **IPFS Node**: Handles file storage and retrieval
+- **Provider Daemon**: Manages pledges, deals, and proofs
+
+### 4. View Logs
+
+```bash
+docker-compose logs -f provider-node
+```
+
+## Apple Silicon (M1/M2/M3) Support
+
+This image supports both Intel and Apple Silicon Macs. No additional configuration needed.
 
 ## Troubleshooting
 
-- **"Wallet not connected"**: Ensure your private key is correct in `provider-stack/.env`.
-- **"Insufficient funds"**: You need POL for gas fees. Get some from the [Polygon Faucet](https://faucet.polygon.technology/).
+| Issue | Solution |
+|-------|----------|
+| "Wallet not connected" | Check your private key in `.env` |
+| "Insufficient funds" | Get POL from [Polygon Faucet](https://faucet.polygon.technology/) |
+| Docker not running | Open Docker Desktop first |
+
+## For Maintainers
+
+The multi-arch Docker image is automatically built via GitHub Actions when you push to `main`.
+
+To trigger manually:
+1. Go to **Actions** → **Build Multi-Arch Docker Image**
+2. Click **Run workflow**

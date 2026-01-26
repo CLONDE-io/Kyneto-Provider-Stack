@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # IPFS Node (Kubo)
   ipfs:
@@ -14,10 +12,7 @@ services:
 
   # Kyneto Provider Node
   provider-node:
-    image: kelechialichi/provider-daemon:latest
-    # build:
-    #   context: ..
-    #   dockerfile: provider-stack/Dockerfile.node
+    image: kyneto/provider-daemon:latest
     environment:
       - PRIVATE_KEY=${PRIVATE_KEY}
       - RPC_URL=${RPC_URL}
