@@ -1,6 +1,7 @@
 {
     "name": "kyneto-provider-daemon",
     "version": "0.1.0",
+    "type": "module",
     "description": "Background daemon for Kyneto storage providers",
     "main": "dist/index.js",
     "scripts": {

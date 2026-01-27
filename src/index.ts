@@ -7,7 +7,7 @@ import { MerkleTree } from 'merkletreejs';
 import keccak256 from 'keccak256';
 import * as fs from 'fs';
 import * as path from 'path';
-import { StorageVaultManager, createVaultManagerFromEnv, VaultStatus } from './storage-vault';
+import { StorageVaultManager, createVaultManagerFromEnv, VaultStatus } from './storage-vault.js';
 
 dotenv.config();
 
