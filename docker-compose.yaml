@@ -1,0 +1,37 @@
+services:
+  # IPFS Node (Kubo)
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "4001:4001" # P2P Swarm
+      - "5001:5001" # API (Internal use)
+      - "8080:8080" # Gateway
+    volumes:
+      - ${KYNETO_VAULT_PATH:-./kyneto-vault}:/data/kyneto-vault  # Use the Kyneto vault for IPFS data
+    environment:
+      - IPFS_PATH=/data/kyneto-vault/ipfs-data
+    restart: always
+
+  # Kyneto Provider Node
+  provider-node:
+    image: ghcr.io/kelz-dev/provider-daemon:latest
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - RPC_URL=${RPC_URL}
+      - API_URL=${API_URL}
+      - REGISTRY_CONTRACT=${REGISTRY_CONTRACT}
+      - TOKEN_CONTRACT=${TOKEN_CONTRACT}
+      - PLEDGES_CONTRACT=${PLEDGES_CONTRACT}
+      - PAYMENTS_CONTRACT=${PAYMENTS_CONTRACT}
+      - PROOF_VERIFIER_CONTRACT=${PROOF_VERIFIER_CONTRACT}
+      - MARKETPLACE_CONTRACT=${MARKETPLACE_CONTRACT}
+      - KUBO_API_URL=http://ipfs:5001
+      # Storage Vault Configuration
+      - PLEDGED_CAPACITY_GB=${PLEDGED_CAPACITY_GB:-10}
+      - KYNETO_VAULT_PATH=/data/kyneto-vault
+    volumes:
+      - ${KYNETO_VAULT_PATH:-./kyneto-vault}:/data/kyneto-vault  # Shared vault with IPFS
+    depends_on:
+      - ipfs
+    restart: always
+

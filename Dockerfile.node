@@ -1,0 +1,35 @@
+# Stage 1: Build
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+COPY services/provider-daemon/package.json ./services/provider-daemon/
+
+# Install dependencies
+RUN npm install --workspaces
+
+# Copy source code
+COPY services/provider-daemon ./services/provider-daemon
+COPY tsconfig.json ./
+
+# Build the daemon
+RUN npm run build -w @incentive-layer/provider-daemon
+
+# Stage 2: Production
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy built assets and production dependencies
+COPY --from=builder /app/services/provider-daemon/dist ./dist
+COPY --from=builder /app/services/provider-daemon/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+
+# Environment defaults
+ENV NODE_ENV=production
+ENV API_URL=http://api.incentivelayer.io
+ENV KUBO_API_URL=http://ipfs:5001
+
+CMD ["node", "dist/index.js"]
