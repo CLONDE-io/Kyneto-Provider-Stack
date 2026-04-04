@@ -35,7 +35,7 @@ RUN chmod +x /usr/local/bin/init-vault.sh
 
 # Environment defaults
 ENV NODE_ENV=production
-ENV API_URL=https://kyneto.app
+ENV API_URL=http://api.incentivelayer.io
 ENV KUBO_API_URL=http://ipfs:5001
 
 ENTRYPOINT ["/usr/local/bin/init-vault.sh"]

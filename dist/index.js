@@ -1,19 +1,56 @@
-import { ethers } from 'ethers';
-import { create as createIpfsClient } from 'kubo-rpc-client';
-import * as dotenv from 'dotenv';
-import axios from 'axios';
-import winston from 'winston';
-import { MerkleTree } from 'merkletreejs';
-import keccak256 from 'keccak256';
-import * as fs from 'fs';
-import * as path from 'path';
-import { io as socketClient } from 'socket.io-client';
-import { createVaultManagerFromEnv } from './storage-vault.js';
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const ethers_1 = require("ethers");
+const ipfs_http_client_1 = require("ipfs-http-client");
+const dotenv = __importStar(require("dotenv"));
+const axios_1 = __importDefault(require("axios"));
+const winston_1 = __importDefault(require("winston"));
+const merkletreejs_1 = require("merkletreejs");
+const keccak256_1 = __importDefault(require("keccak256"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const storage_vault_1 = require("./storage-vault");
 dotenv.config();
-const logger = winston.createLogger({
+const logger = winston_1.default.createLogger({
     level: 'info',
-    format: winston.format.combine(winston.format.timestamp(), winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level.toUpperCase()}]: ${message}`)),
-    transports: [new winston.transports.Console()]
+    format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.printf(({ timestamp, level, message }) => `${timestamp} [${level.toUpperCase()}]: ${message}`)),
+    transports: [new winston_1.default.transports.Console()]
 });
 class ProviderDaemon {
     constructor() {
@@ -24,14 +61,13 @@ class ProviderDaemon {
         this.vaultManager = null;
         this.vaultStatus = null;
         this.shardData = new Map();
-        this.socket = null;
         this.API_URL = process.env.API_URL || 'http://localhost:3000';
         this.HEARTBEAT_MS = 30000; // 30 seconds
         this.SECTOR_SIZE = 1024; // 1KB sectors for Merkle tree
         this.DATA_DIR = path.join(process.cwd(), 'data');
-        this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-        this.wallet = new ethers.Wallet(process.env.PRIVATE_KEY, this.provider);
-        this.ipfs = createIpfsClient({ url: process.env.KUBO_API_URL || 'http://localhost:5001' });
+        this.provider = new ethers_1.ethers.JsonRpcProvider(process.env.RPC_URL);
+        this.wallet = new ethers_1.ethers.Wallet(process.env.PRIVATE_KEY, this.provider);
+        this.ipfs = (0, ipfs_http_client_1.create)({ url: process.env.KUBO_API_URL || 'http://localhost:5001' });
         if (!fs.existsSync(this.DATA_DIR)) {
             fs.mkdirSync(this.DATA_DIR);
         }
@@ -43,14 +79,14 @@ class ProviderDaemon {
                 'function postChallenges(uint256) view returns (uint256 dealId, address provider, uint256 challengeTimestamp, uint256 deadline, bool submitted, bool verified)',
                 'function getChallengeIndices(uint256 challengeId) view returns (uint256[])'
             ];
-            this.proverContract = new ethers.Contract(proverAddress, proverABI, this.wallet);
+            this.proverContract = new ethers_1.ethers.Contract(proverAddress, proverABI, this.wallet);
         }
     }
     async start() {
         logger.info('🚀 Provider Daemon starting...');
         logger.info(`📍 Provider Address: ${this.wallet.address}`);
         // Initialize Storage Vault
-        this.vaultManager = createVaultManagerFromEnv();
+        this.vaultManager = (0, storage_vault_1.createVaultManagerFromEnv)();
         if (this.vaultManager) {
             const success = await this.vaultManager.ensureVaultExists();
             if (!success) {
@@ -63,70 +99,13 @@ class ProviderDaemon {
         else {
             logger.warn('⚠️  Storage vault not configured. Set PLEDGED_CAPACITY_GB in .env');
         }
-        // Initialize WebSocket Client to the Kyneto API (replaces Express Server + Tunnels)
         try {
-            logger.info(`🔌 Connecting to Relay Server at ${this.API_URL}...`);
-            this.socket = socketClient(this.API_URL, {
-                reconnection: true,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                reconnectionAttempts: Infinity
-            });
-            this.socket.on('connect', () => {
-                logger.info(`✅ Connected to Kyneto Relay Network! (Socket ID: ${this.socket?.id})`);
-                logger.info('📡 Listening for RPC requests...');
-                // Register this provider to receive RPC calls
-                this.socket?.emit('register:provider', { address: this.wallet.address });
-            });
-            this.socket.on('disconnect', () => {
-                logger.warn('⚠️ Disconnected from Kyneto Relay. Reconnecting...');
-            });
-            // RPC Handler: Get Peer ID
-            this.socket.on('rpc:get-peer-id', async (callback) => {
-                logger.info('➡️ Received RPC request: rpc:get-peer-id');
-                try {
-                    const idInfo = await this.ipfs.id();
-                    callback({ peerId: idInfo.id });
-                }
-                catch (err) {
-                    logger.error(`❌ RPC failed to get IPFS Peer ID: ${err.message}`);
-                    callback({ error: 'Failed to connect to IPFS' });
-                }
-            });
-            // RPC Handler: Get Status
-            this.socket.on('rpc:get-status', (callback) => {
-                callback({
-                    status: 'online',
-                    network: 'Polygon Amoy',
-                    providerAddress: this.wallet.address,
-                    vaultStatus: this.vaultStatus || 'initializing'
-                });
-            });
+            const id = await this.ipfs.id();
+            logger.info(`📦 Connected to Kubo: ${id.id}`);
         }
-        catch (socketError) {
-            logger.error(`❌ Failed to initialize WebSocket client: ${socketError.message}`);
-        }
-        let retries = 5;
-        while (retries > 0) {
-            try {
-                logger.info(`🔄 Attempting to connect to Kubo (Attempts left: ${retries})...`);
-                const id = await this.ipfs.id();
-                logger.info(`📦 Connected to Kubo: ${id.id}`);
-                break;
-            }
-            catch (e) {
-                if (e.message.includes('no protocol with name: tls')) {
-                    logger.warn('⚠️  Kubo returned a "tls" protocol that this client doesn\'t recognize, but we will attempt to proceed anyway.');
-                    break;
-                }
-                retries--;
-                if (retries === 0) {
-                    logger.error(`❌ Failed to connect to Kubo: ${e.message}`);
-                    process.exit(1);
-                }
-                logger.warn(`⚠️ Kubo not ready yet, retrying in 5 seconds...`);
-                await new Promise(resolve => setTimeout(resolve, 5000));
-            }
+        catch (e) {
+            logger.error('❌ Failed to connect to Kubo. Ensure IPFS is running.');
+            process.exit(1);
         }
         // Initialize Proof Verifier listener
         if (this.proverContract) {
@@ -155,7 +134,7 @@ class ProviderDaemon {
                 return;
             logger.info(`🧪 Generating real Merkle proofs for challenge #${challengeId}...`);
             // We need the shard CID associated with this deal
-            const response = await axios.get(`${this.API_URL}/api/deals/${dealId}`);
+            const response = await axios_1.default.get(`${this.API_URL}/api/deals/${dealId}`);
             const shard = response.data.shards.find((s) => s.provider_address === this.wallet.address);
             if (!shard) {
                 throw new Error(`No shard found for deal ${dealId} assigned to this provider`);
@@ -179,8 +158,8 @@ class ProviderDaemon {
             const proofs = [];
             for (const index of indices) {
                 const sector = sectors[index % sectors.length];
-                leafData.push(ethers.hexlify(sector));
-                const proof = tree.getHexProof(keccak256(sector));
+                leafData.push(ethers_1.ethers.hexlify(sector));
+                const proof = tree.getHexProof((0, keccak256_1.default)(sector));
                 proofs.push(proof);
             }
             logger.info(`📤 Submitting real PoSt proof for challenge #${challengeId}...`);
@@ -211,7 +190,7 @@ class ProviderDaemon {
                     percent_used: this.vaultStatus.percentUsed
                 };
             }
-            await axios.post(`${this.API_URL}/api/heartbeat`, heartbeatData);
+            await axios_1.default.post(`${this.API_URL}/api/heartbeat`, heartbeatData);
             if (this.vaultStatus) {
                 logger.info(`💓 Heartbeat sent (Storage: ${this.vaultStatus.usedGB}GB / ${this.vaultStatus.capacityGB}GB)`);
             }
@@ -226,10 +205,10 @@ class ProviderDaemon {
     async checkAssignments() {
         try {
             logger.info('🔍 Checking for new shard assignments...');
-            const response = await axios.get(`${this.API_URL}/api/providers/${this.wallet.address}`);
+            const response = await axios_1.default.get(`${this.API_URL}/api/providers/${this.wallet.address}`);
             const deals = response.data.deals || [];
             for (const deal of deals) {
-                const dealDetail = await axios.get(`${this.API_URL}/api/deals/${deal.deal_id}`);
+                const dealDetail = await axios_1.default.get(`${this.API_URL}/api/deals/${deal.deal_id}`);
                 const myShards = dealDetail.data.shards.filter((s) => s.provider_address === this.wallet.address);
                 for (const shard of myShards) {
                     if (shard.active) {
@@ -299,8 +278,8 @@ class ProviderDaemon {
             while (sectors.length < 10) {
                 sectors.push(Buffer.alloc(this.SECTOR_SIZE, 0));
             }
-            const leaves = sectors.map(s => keccak256(s));
-            const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
+            const leaves = sectors.map(s => (0, keccak256_1.default)(s));
+            const tree = new merkletreejs_1.MerkleTree(leaves, keccak256_1.default, { sortPairs: true });
             this.merkleTrees.set(cid, tree);
             this.shardData.set(cid, sectors);
             logger.info(`✅ Merkle tree built for ${cid}. Root: ${tree.getHexRoot()}`);

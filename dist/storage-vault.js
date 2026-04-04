@@ -1,18 +1,58 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { execSync } from 'child_process';
-import winston from 'winston';
-const logger = winston.createLogger({
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.StorageVaultManager = void 0;
+exports.createVaultManagerFromEnv = createVaultManagerFromEnv;
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const child_process_1 = require("child_process");
+const winston_1 = __importDefault(require("winston"));
+const logger = winston_1.default.createLogger({
     level: 'info',
-    format: winston.format.combine(winston.format.timestamp(), winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level.toUpperCase()}]: ${message}`)),
-    transports: [new winston.transports.Console()]
+    format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.printf(({ timestamp, level, message }) => `${timestamp} [${level.toUpperCase()}]: ${message}`)),
+    transports: [new winston_1.default.transports.Console()]
 });
 /**
  * StorageVaultManager handles the creation and management of the pre-allocated
  * storage vault for Kyneto providers. This ensures providers cannot pledge more
  * storage than they have available.
  */
-export class StorageVaultManager {
+class StorageVaultManager {
     constructor(config) {
         this.capacityGB = config.capacityGB;
         this.vaultPath = config.vaultPath || '/data/kyneto-vault';
@@ -119,7 +159,7 @@ export class StorageVaultManager {
     async getAvailableDiskSpace() {
         try {
             // Use df command to get available space (works in Linux/Docker)
-            const result = execSync(`df -BG "${this.vaultPath}" | tail -1 | awk '{print $4}'`, {
+            const result = (0, child_process_1.execSync)(`df -BG "${this.vaultPath}" | tail -1 | awk '{print $4}'`, {
                 encoding: 'utf-8'
             }).trim();
             // Remove 'G' suffix and parse
@@ -157,7 +197,7 @@ export class StorageVaultManager {
         status.exists = true;
         try {
             // Calculate actual disk usage of the data directory
-            const result = execSync(`du -s "${this.dataDir}" | cut -f1`, {
+            const result = (0, child_process_1.execSync)(`du -s "${this.dataDir}" | cut -f1`, {
                 encoding: 'utf-8'
             }).trim();
             const usedKB = parseInt(result, 10);
@@ -239,10 +279,11 @@ export class StorageVaultManager {
         return status.availableGB >= fileSizeGB;
     }
 }
+exports.StorageVaultManager = StorageVaultManager;
 /**
  * Create and initialize the storage vault manager from environment variables
  */
-export function createVaultManagerFromEnv() {
+function createVaultManagerFromEnv() {
     const capacityGB = parseInt(process.env.PLEDGED_CAPACITY_GB || '0', 10);
     if (capacityGB <= 0) {
         logger.warn('⚠️  PLEDGED_CAPACITY_GB not set or invalid. Storage vault disabled.');
