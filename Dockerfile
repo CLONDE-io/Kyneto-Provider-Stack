@@ -29,9 +29,9 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy initialization script
+# Copy initialization script and fix Windows line endings
 COPY init-vault.sh /usr/local/bin/init-vault.sh
-RUN chmod +x /usr/local/bin/init-vault.sh
+RUN sed -i 's/\r$//' /usr/local/bin/init-vault.sh && chmod +x /usr/local/bin/init-vault.sh
 
 # Environment defaults
 ENV NODE_ENV=production
