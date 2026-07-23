@@ -26,10 +26,7 @@ cd Kyneto-Provider-Stack
 cp .env.example .env
 ```
 
-Edit `.env` and configure your credentials. 
-
-> ⚠️ **CRITICAL: Blockchain RPC Configuration**
-> By default, the `.env.example` file contains a public Polygon Amoy RPC URL. **You must replace this with a dedicated free RPC from [Alchemy](https://alchemy.com/), [Infura](https://infura.io/), or [QuickNode](https://www.quicknode.com/).** Public nodes actively drop long-running web3 connections. If you do not create a free Alchemy account and paste your `https://polygon-amoy...` URL into the `.env` file, your Node Daemon will constantly lose connection to the smart contracts and crash.
+Edit `.env` and configure:
 
 | Variable | Description |
 |----------|-------------|
@@ -134,3 +131,4 @@ The multi-arch Docker image is automatically built via GitHub Actions when you p
 To trigger manually:
 1. Go to **Actions** → **Build Multi-Arch Docker Image**
 2. Click **Run workflow**
+

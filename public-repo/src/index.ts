@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { create as createIpfsClient } from 'kubo-rpc-client';
+import { create as createIpfsClient } from 'ipfs-http-client';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import winston from 'winston';
@@ -28,8 +28,6 @@ class ProviderDaemon {
     private proverContract: ethers.Contract | null = null;
     private heartbeatInterval: NodeJS.Timeout | null = null;
     private eventInterval: NodeJS.Timeout | null = null;
-    private postPollInterval: NodeJS.Timeout | null = null;
-    private lastPolledBlock: number = 0;
     private merkleTrees: Map<string, MerkleTree> = new Map();
     private vaultManager: StorageVaultManager | null = null;
     private vaultStatus: VaultStatus | null = null;
@@ -80,38 +78,28 @@ class ProviderDaemon {
             logger.warn('⚠️  Storage vault not configured. Set PLEDGED_CAPACITY_GB in .env');
         }
 
-        let connected = false;
-        for (let i = 0; i < 5; i++) {
-            try {
-                const id = await this.ipfs.id();
-                logger.info(`📦 Connected to Kubo: ${id.id}`);
-                connected = true;
-                break;
-            } catch (e: any) {
-                logger.warn(`⚠️ Waiting for Kubo API... (${e.message})`);
-                await new Promise(resolve => setTimeout(resolve, 3000));
-            }
-        }
-        if (!connected) {
-            logger.error('❌ Failed to connect to Kubo after multiple attempts. Exiting.');
+        try {
+            const id = await this.ipfs.id();
+            logger.info(`📦 Connected to Kubo: ${id.id}`);
+        } catch (e) {
+            logger.error('❌ Failed to connect to Kubo. Ensure IPFS is running.');
             process.exit(1);
         }
 
-        // Initialize Proof Verifier listener via block polling
-        // (Public RPC nodes expire event filters, causing "filter not found" errors
-        //  with ethers .on(). Polling avoids this entirely.)
+        // Initialize Proof Verifier listener
         if (this.proverContract) {
             logger.info(`🛡️  Monitoring PoSt challenges at ${this.proverContract.target}`);
-            this.lastPolledBlock = await this.provider.getBlockNumber();
-            this.postPollInterval = setInterval(() => this.pollPoStChallenges(), 15000); // Every 15s
-            this.pollPoStChallenges(); // Check immediately
+            this.proverContract.on('PoStChallengeCreated', async (challengeId, dealId, provider) => {
+                if (provider.toLowerCase() === this.wallet.address.toLowerCase()) {
+                    await this.handlePoStChallenge(challengeId, dealId);
+                }
+            });
         } else {
             logger.warn('⚠️  PROOF_VERIFIER_CONTRACT not set. PoSt challenges will not be handled.');
         }
 
         // Connect to relay WebSocket for real-time deal cancellation events
         this.connectRelaySocket();
-
 
         // Start heartbeat
         this.heartbeatInterval = setInterval(() => this.sendHeartbeat(), this.HEARTBEAT_MS);
@@ -169,7 +157,6 @@ class ProviderDaemon {
             logger.warn(`⚠️ Failed to connect relay WebSocket: ${err.message}`);
         }
     }
-
 
     private async handlePoStChallenge(challengeId: bigint, dealId: bigint) {
         logger.info(`🎯 Received PoSt Challenge #${challengeId} for Deal #${dealId}`);
@@ -229,41 +216,6 @@ class ProviderDaemon {
         }
     }
 
-    /**
-     * Poll for PoStChallengeCreated events by querying recent blocks.
-     * This avoids the "filter not found" error from public RPC nodes.
-     */
-    private async pollPoStChallenges() {
-        try {
-            if (!this.proverContract) return;
-
-            const currentBlock = await this.provider.getBlockNumber();
-            if (currentBlock <= this.lastPolledBlock) return;
-
-            const fromBlock = this.lastPolledBlock + 1;
-            const toBlock = currentBlock;
-
-            const filter = this.proverContract.filters.PoStChallengeCreated();
-            const events = await this.proverContract.queryFilter(filter, fromBlock, toBlock);
-
-            for (const event of events) {
-                const parsed = event as ethers.EventLog;
-                const challengeId = parsed.args[0];
-                const dealId = parsed.args[1];
-                const provider = parsed.args[2];
-
-                if (provider.toLowerCase() === this.wallet.address.toLowerCase()) {
-                    await this.handlePoStChallenge(challengeId, dealId);
-                }
-            }
-
-            this.lastPolledBlock = toBlock;
-        } catch (error: any) {
-            logger.warn(`⚠️ PoSt poll error: ${error.message}`);
-        }
-    }
-
-
     private async sendHeartbeat() {
         try {
             // Update vault status before sending heartbeat
@@ -271,13 +223,8 @@ class ProviderDaemon {
                 this.vaultStatus = await this.vaultManager.getVaultStatus();
             }
 
-            // Sign the heartbeat message (EIP-191) — required by the server
-            const message = `Kyneto Provider Heartbeat`;
-            const signature = await this.wallet.signMessage(message);
-
             const heartbeatData: any = {
-                provider_address: this.wallet.address,
-                signature
+                provider_address: this.wallet.address
             };
 
             // Include storage vault status in heartbeat
@@ -398,7 +345,6 @@ class ProviderDaemon {
         }
     }
 
-
     private async ensurePinned(cid: string) {
         try {
             // Check if already pinned
@@ -476,7 +422,6 @@ class ProviderDaemon {
     stop() {
         if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
         if (this.eventInterval) clearInterval(this.eventInterval);
-        if (this.postPollInterval) clearInterval(this.postPollInterval);
         if (this.proverContract) this.proverContract.removeAllListeners();
         if (this.relaySocket) this.relaySocket.disconnect();
         logger.info('🛑 Provider Daemon stopped.');
